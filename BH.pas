@@ -1,5 +1,7 @@
 ﻿{$reference BHModuleData.dll}
 
 begin
-  BHModule.All.PrintLines;
+  BHModule.Modules.PrintLines;
+  BHModule['Timer'].Runing := false;
+  //m := BHModule.Item[''];
 end.

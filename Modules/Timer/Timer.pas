@@ -5,6 +5,13 @@ uses BHModuleData;
 
 type
   TimerModule=class(BHModule)
+  
+    protected function ApplySettings(Settings: Dictionary<string, string>; used_lst: List<string>): boolean; override;
+    begin
+      Result := inherited ApplySettings(Settings, used_lst);
+      
+      inherited FinishSettings(Settings, used_lst);
+    end;
     
     protected procedure StartUp; override;
     begin
