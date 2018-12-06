@@ -79,7 +79,7 @@ try
       begin
         
         bw.Write(false);
-        foreach var m in BHModule.Modules do m.Runing := false;
+        BHModule.GetReadyForExit;
         pipe.WaitForPipeDrain;
         Halt;
         

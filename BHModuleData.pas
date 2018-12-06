@@ -30,7 +30,96 @@ type
     ///Collection of all modules
     public static property Modules: System.Collections.Generic.IReadOnlyCollection<BHModule> read All.Values;
     
-    static constructor :=
+    private static function LoadSettings(var Settings: Dictionary<string, Dictionary<string, string>>): boolean;
+    begin
+      
+      if System.IO.File.Exists('settings (backup).dat') then
+        case MessageBox.Show(
+          
+          $'Probably, last time settings were saving, issue occurred.{#10}' +
+          $'Load backup?',
+          
+          $'Settings backup found',
+          
+          MessageBoxButtons.YesNo
+        ) of
+          DialogResult.Yes:
+          begin
+            System.IO.File.Copy('settings (backup).dat', 'settings.dat', true);
+            System.IO.File.Delete('settings (backup).dat');
+          end;
+        end;
+      
+      Settings := new Dictionary<string, Dictionary<string, string>>;
+      
+      foreach var l in ReadLines('settings.dat') do
+      begin
+        if l='' then continue;
+        
+        var ss := l.Split(new char[]('='), 2);
+        if ss.Length<>2 then
+        begin
+          Result := true;
+          ss := new string[](ss[0], '');
+        end;
+        
+        var key := ss[0].Trim(' ', #9).Split(new char[](':'), 2);
+        if key.Length<>2 then
+        begin
+          Result := true;
+          key := new string[](key[0], '');
+        end;
+        
+        var MName := key[0].Trim(' ', #9);
+        var SName := key[1].Trim(' ', #9);
+        var SVal := ss[1].Trim(' ', #9);
+        
+        if not Settings.ContainsKey(MName) then Settings[MName] := new Dictionary<string, string>;
+        var MSettings := Settings[MName];
+        
+        if MSettings.ContainsKey(SName) then
+          if MSettings[SName] = SVal then
+            Result := true else
+            case MessageBox.Show(
+              
+              $'Key "{MName}:{SName}" was found multiple times in "settings.dat" file.{#10}' +
+              $'First value is "{MSettings[SName]}".{#10}' +
+              $'New value is "{SVal}".{#10}' +
+              $'Rewrite first value with new one?',
+              
+              $'Conflicting settings keys',
+              
+              MessageBoxButtons.YesNo
+            ) of
+              DialogResult.Yes: Result := true;
+              else continue;//foreach var l
+            end;
+        
+        MSettings[SName] := SVal;
+        
+      end;
+      
+    end;
+    
+    private static procedure SaveSettings(Settings: Dictionary<string, Dictionary<string, string>>);
+    begin
+      
+      System.IO.File.Copy('settings.dat', 'settings (backup).dat', true);
+      var sw := System.IO.File.CreateText('settings.dat');
+      
+      foreach var kvp1 in Settings do
+        foreach var kvp2 in kvp1.Value do
+          if not kvp2.Key.StartsWith(#0) then
+            sw.WriteLine($'{kvp1.Key}:{kvp2.Key}={kvp2.Value}');
+      
+      sw.Close;
+      System.IO.File.Delete('settings (backup).dat');
+      
+    end;
+    
+    private static NewSettings := new Dictionary<string, Dictionary<string, string>>;
+    
+    public static constructor :=
     try
       
       {$region Load Modules}
@@ -76,76 +165,8 @@ type
       
       {$endregion Load Modules}
       
-      {$region Load settings}
-      
-      if System.IO.File.Exists('settings (backup).dat') then
-        case MessageBox.Show(
-          
-          $'Probably, last time settings were saving, issue occurred.{#10}' +
-          $'Load backup?',
-          
-          $'Settings backup found',
-          
-          MessageBoxButtons.YesNo
-        ) of
-          DialogResult.Yes:
-          begin
-            System.IO.File.Copy('settings (backup).dat', 'settings.dat', true);
-            System.IO.File.Delete('settings (backup).dat');
-          end;
-        end;
-      
-      var Settings := new Dictionary<string, Dictionary<string, string>>;
-      var ReSaveSettings := false;
-      
-      foreach var l in ReadLines('settings.dat') do
-      begin
-        if l='' then continue;
-        
-        var ss := l.Split(new char[]('='), 2);
-        if ss.Length<>2 then
-        begin
-          ReSaveSettings := true;
-          ss := new string[](ss[0], '');
-        end;
-        
-        var key := ss[0].Trim(' ', #9).Split(new char[](':'), 2);
-        if key.Length<>2 then
-        begin
-          ReSaveSettings := true;
-          key := new string[](key[0], '');
-        end;
-        
-        var MName := key[0].Trim(' ', #9);
-        var SName := key[1].Trim(' ', #9);
-        var SVal := ss[1].Trim(' ', #9);
-        
-        if not Settings.ContainsKey(MName) then Settings[MName] := new Dictionary<string, string>;
-        var MSettings := Settings[MName];
-        
-        if MSettings.ContainsKey(SName) then
-          if MSettings[SName] = SVal then
-            ReSaveSettings := true else
-            case MessageBox.Show(
-              
-              $'Key "{MName}:{SName}" was found multiple times in "settings.dat" file.{#10}' +
-              $'First value is "{MSettings[SName]}".{#10}' +
-              $'New value is "{SVal}".{#10}' +
-              $'Rewrite first value with new one?',
-              
-              $'Conflicting settings keys',
-              
-              MessageBoxButtons.YesNo
-            ) of
-              DialogResult.Yes: ReSaveSettings := true;
-              else continue;//foreach var l
-            end;
-        
-        MSettings[SName] := SVal;
-        
-      end;
-      
-      {$endregion Load settings}
+      var Settings: Dictionary<string, Dictionary<string, string>>;
+      var ReSaveSettings := LoadSettings(Settings);
       
       {$region Use settings on modules}
       
@@ -178,30 +199,13 @@ type
               ReSaveSettings := true;
               Settings.Remove(kvp.Key);
             end;
-            else continue;//foreach var l
+            else continue;
           end;
       
       {$endregion Use settings on modules}
       
-      {$region ReSave Settings}
-      
       if ReSaveSettings then
-      begin
-        
-        System.IO.File.Copy('settings.dat', 'settings (backup).dat', true);
-        var sw := System.IO.File.CreateText('settings.dat');
-        
-        foreach var kvp1 in Settings do
-          foreach var kvp2 in kvp1.Value do
-            if not kvp2.Key.StartsWith(#0) then
-              sw.WriteLine($'{kvp1.Key}:{kvp2.Key}={kvp2.Value}');
-        
-        sw.Close;
-        System.IO.File.Delete('settings (backup).dat');
-        
-      end;
-      
-      {$endregion ReSave Settings}
+        SaveSettings(Settings);
       
     except
       on e: Exception do
@@ -221,6 +225,52 @@ type
       end;
     end;
     
+    protected procedure OverrideSetting(SName, SVal: string);
+    begin
+      var MName := self.Name;
+      if not NewSettings.ContainsKey(MName) then NewSettings[MName] := new Dictionary<string, string>;
+      NewSettings[MName][SName] := SVal;
+    end;
+    
+    private static procedure SaveNewSettings;
+    begin
+      
+      var Settings: Dictionary<string, Dictionary<string, string>>;
+      var ReSaveSettings := LoadSettings(Settings);
+      
+      foreach var kvp1 in NewSettings do
+      begin
+        if not Settings.ContainsKey(kvp1.Key) then Settings[kvp1.Key] := new Dictionary<string, string>;
+        
+        foreach var kvp2 in kvp1.Value do
+          if
+            (not Settings[kvp1.Key].ContainsKey(kvp2.Key)) or
+            (Settings[kvp1.Key][kvp2.Key] <> kvp2.Value)
+          then
+          begin
+            ReSaveSettings := true;
+            Settings[kvp1.Key][kvp2.Key] := kvp2.Value;
+          end;
+        
+      end;
+      NewSettings.Clear;
+      
+      if ReSaveSettings then
+        SaveSettings(Settings);
+      
+    end;
+    
+    public static procedure GetReadyForExit;
+    begin
+      
+      foreach var m in Modules do
+        if m.Runing then
+          m.ShutDown;
+      
+      SaveNewSettings;
+      
+    end;
+    
     {$endregion static}
     
     {$region MainBody}
@@ -231,10 +281,14 @@ type
     public property Runing: boolean read is_on write
     begin
       if is_on=value then exit;
+      
       if value then
         StartUp else
         ShutDown;
+      
       is_on := value;
+      OverrideSetting('Active', value.ToString);
+      
     end;
     
     
