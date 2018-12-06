@@ -1,9 +1,11 @@
 ﻿library BHModuleData;
 
 {$reference System.Windows.Forms.dll}
+{$reference System.Drawing.dll}
+uses System.Windows.Forms;
+uses System.Drawing;
 
 uses System.Reflection;
-uses System.Windows.Forms;
 
 type
   BHModule = abstract class
@@ -58,11 +60,13 @@ type
         if All.ContainsKey(nm.Name) then
         begin
           MessageBox.Show(
+            
             $'Every module must have unique name{#10}' +
             $'But more than one "{nm.Name}" modules was found{#10}' +
             $'Press OK to exit BH',
-            $'Conflicting module name''s',
-            MessageBoxButtons.OK
+            
+            $'Conflicting module name''s'
+            
           );
           Halt;
         end;
@@ -76,9 +80,12 @@ type
       
       if System.IO.File.Exists('settings (backup).dat') then
         case MessageBox.Show(
+          
           $'Probably, last time settings were saving, issue occurred.{#10}' +
           $'Load backup?',
+          
           $'Settings backup found',
+          
           MessageBoxButtons.YesNo
         ) of
           DialogResult.Yes:
@@ -120,11 +127,14 @@ type
           if MSettings[SName] = SVal then
             ReSaveSettings := true else
             case MessageBox.Show(
+              
               $'Key "{MName}:{SName}" was found multiple times in "settings.dat" file.{#10}' +
               $'First value is "{MSettings[SName]}".{#10}' +
               $'New value is "{SVal}".{#10}' +
               $'Rewrite first value with new one?',
+              
               $'Conflicting settings keys',
+              
               MessageBoxButtons.YesNo
             ) of
               DialogResult.Yes: ReSaveSettings := true;
@@ -155,9 +165,12 @@ type
       foreach var kvp in Settings.ToList do
         if not kvp.Value.ContainsKey(#0'=used') then
           case MessageBox.Show(
+            
             $'Module "{kvp.Key}" was not found.{#10}' +
             $'Delete it''s settings?{#10}',
+            
             $'Unused settings keys',
+            
             MessageBoxButtons.YesNo
           ) of
             DialogResult.Yes:
@@ -224,6 +237,8 @@ type
       is_on := value;
     end;
     
+    
+    
     ///Standard settings load start
     ///It load's value of "Runing" from setting "Active",
     ///and add's "Active" to used settings list
@@ -281,8 +296,14 @@ type
     ///Including time when BH shut's down
     protected procedure ShutDown; abstract;
     
+    
+    
     ///Must return unique name
     public property Name: string read; abstract;
+    
+    {$resource 'Icons\default module icon.bmp'}
+    ///Must return System.Drawing.Image that represents module
+    public property Icon: Bitmap read new Bitmap(Assembly.GetExecutingAssembly.GetManifestResourceStream('default module icon.bmp')); virtual;
     
     {$endregion MainBody}
     

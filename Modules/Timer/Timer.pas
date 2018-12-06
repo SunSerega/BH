@@ -8,12 +8,12 @@ type
     
     protected procedure StartUp; override;
     begin
-      writeln('Timer Started');
+      //writeln('Timer Started');
     end;
     
     protected procedure ShutDown; override;
     begin
-      writeln('Timer Stoped');
+      //writeln('Timer Stoped');
     end;
     
     public property Name: string read 'Timer'; override;
