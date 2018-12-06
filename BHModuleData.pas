@@ -25,6 +25,7 @@ type
     
     private static property Item[id: string]: BHModule read _GetModuleById; default;
     
+    ///Collection of all modules
     public static property Modules: System.Collections.Generic.IReadOnlyCollection<BHModule> read All.Values;
     
     static constructor :=
@@ -49,9 +50,23 @@ type
         )
       do
       begin
+        if t.IsAbstract then continue;
         var constr := t.GetConstructor(System.Type.EmptyTypes);
         if constr=nil then continue;
         var nm := BHModule(constr.Invoke(new object[0]));
+        
+        if All.ContainsKey(nm.Name) then
+        begin
+          MessageBox.Show(
+            $'Every module must have unique name{#10}' +
+            $'But more than one "{nm.Name}" modules was found{#10}' +
+            $'Press OK to exit BH',
+            $'Conflicting module name''s',
+            MessageBoxButtons.OK
+          );
+          Halt;
+        end;
+        
         All.Add(nm.Name, nm);
       end;
       
@@ -132,7 +147,7 @@ type
           Settings[m.Name] := new Dictionary<string, string>;
         end;
         
-        ReSaveSettings := m.ApplySettings(Settings[m.Name], new List<string>) or ReSaveSettings;
+        ReSaveSettings := m.ApplySettings(Settings[m.Name]) or ReSaveSettings;
         
         Settings[m.Name][#0'=used'] := nil;
       end;
@@ -198,6 +213,8 @@ type
     {$region MainBody}
     
     private is_on := false;
+    ///Is module active
+    ///This property call's StartUp/ShutDown when value is changed
     public property Runing: boolean read is_on write
     begin
       if is_on=value then exit;
@@ -207,48 +224,72 @@ type
       is_on := value;
     end;
     
-    protected function ApplySettings(Settings: Dictionary<string, string>; used_lst: List<string>): boolean; virtual;
+    ///Standard settings load start
+    ///It load's value of "Runing" from setting "Active",
+    ///and add's "Active" to used settings list
+    ///Return's true if "Active" setting was corrupted (or missing) and therefore recreated
+    ///Default value of "Active" is "True"
+    protected function ApplySettings_Start(Settings: Dictionary<string, string>; used_lst: List<string>): boolean;
     begin
       Result := false;
       
       var Run_bool := true;
       var Run_str := Run_bool.ToString;
       
-      used_lst += 'Active';
-      if not Settings.TryGetValue('Active', Run_str) then
-      begin
-        Result := true;
-        Settings['Active'] := Run_bool.ToString;
-      end else
-      if not boolean.TryParse(Run_str, Run_bool) then
+      if
+        (not Settings.TryGetValue('Active', Run_str)) or
+        (not boolean.TryParse(Run_str, Run_bool))
+      then
       begin
         Result := true;
         Run_bool := true;
         Settings['Active'] := Run_bool.ToString;
       end;
       
+      used_lst += 'Active';
       self.Runing := Run_bool;
       
     end;
-    
-    protected procedure FinishSettings(Settings: Dictionary<string, string>; used_lst: List<string>);
+    ///Executed when loading
+    ///Must return true if it changed contents of "Settings" variable
+    protected function ApplySettings(Settings: Dictionary<string, string>): boolean; virtual;
     begin
+      var used_lst := new List<string>;
+      Result := ApplySettings_Start(Settings, used_lst);
+      Result := ApplySettings_End(Settings, used_lst) or Result;
+    end;
+    ///Standard settings load end
+    ///Deletes all unused settings
+    ///Return's true if any settings was deleted
+    protected function ApplySettings_End(Settings: Dictionary<string, string>; used_lst: List<string>): boolean;
+    begin
+      Result := false;
       
       foreach var kvp in Settings.ToList do
         if not used_lst.Contains(kvp.Key) then
+        begin
+          Result := true;
           Settings.Remove(kvp.Key);
+        end;
       
     end;
     
+    ///Executed every time module restart's
+    ///Including first start (if setting "Active" was "true")
     protected procedure StartUp; abstract;
+    ///Executed every time module is shut's down
+    ///Including time when BH shut's down
     protected procedure ShutDown; abstract;
     
+    ///Must return unique name
     public property Name: string read; abstract;
     
     {$endregion MainBody}
     
     {$region Misc}
     
+    ///Return's $"BHModule[\"{Name}\"]"
+    ///This is only for debug, so you can override it, if you want
     public function ToString: string; override :=
     $'BHModule["{Name}"]';
     
