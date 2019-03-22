@@ -441,7 +441,7 @@ type
     public procedure DrawLine(x1,y1, x2,y2: real; cb,cg,cr,ca: real);
     begin
       
-      var XYSwaped := abs(y2-y1) > x2-x1;
+      var XYSwaped := abs(y2-y1) > abs(x2-x1);
       if XYSwaped then
       begin
         Swap(x1,y1);
@@ -472,12 +472,12 @@ type
         
         if XYSwaped then
         begin
-          if iy<>-1 then  AlterPixel(iy,  x, cr,cg,cb, ca*pa);
-          if iy<>h-1 then AlterPixel(iy+1,x, cr,cg,cb, ca*(1-pa));
+          if iy<>-1 then  AlterPixel(iy,  x, cr,cg,cb, ca*(1-pa));
+          if iy<>h-1 then AlterPixel(iy+1,x, cr,cg,cb, ca*pa);
         end else
         begin
-          if iy<>-1 then  AlterPixel(x,  iy, cr,cg,cb, ca*pa);
-          if iy<>h-1 then AlterPixel(x,iy+1, cr,cg,cb, ca*(1-pa));
+          if iy<>-1 then  AlterPixel(x,  iy, cr,cg,cb, ca*(1-pa));
+          if iy<>h-1 then AlterPixel(x,iy+1, cr,cg,cb, ca*pa);
         end;
         
       end;

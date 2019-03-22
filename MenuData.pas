@@ -52,7 +52,7 @@ type
     
     public const R=450;
     public const iR=150;
-    public const MinMenus=6;
+    public const MinMenus=5;
     
     
     
@@ -65,21 +65,27 @@ type
       pnt.DrawCircle;
       pnt.DrawCircle;
       
-      var dang := Pi*2/Max(MinMenus,sub_menus.Count);
+      var c := Max(MinMenus,sub_menus.Count);
+      if c and 1 = 0 then c += 1;
+      
+      var dang := Pi*2/c;
       var ang := -dang/2;
       
-      var NextLine: procedure := ()->
+      var NextLine: (real,real, Painter)->real := (ang, dang, pnt)->
       begin
         
         var rx := Sin(ang);
         var ry := -Cos(ang);
+        
         pnt.DrawLine(
           500 + iR*rx, 500 + iR*ry,
           500 +  R*rx, 500 +  R*ry,
           0,0,0,1
         );
         
-        ang += dang;
+        Result := ang + dang;
+        
+        writeln('line');
       end;
       
       var NextImage: procedure := ()->
@@ -90,20 +96,19 @@ type
       var enm: IEnumerator<Painter> := sub_menus.Values.GetEnumerator();
       
       if not enm.MoveNext then exit;
-      NextLine;
+      ang := NextLine(ang,dang, pnt);
       NextImage;
       
-      NextLine;
+      ang := NextLine(ang,dang, pnt);
       if not enm.MoveNext then exit;
-      NextImage;
       
       while enm.MoveNext do
       begin
-        NextLine;
+        ang := NextLine(ang,dang, pnt);
         NextImage;
       end;
       
-      if sub_menus.Count < MinMenus then NextLine;
+      if c>sub_menus.Count then NextLine(ang,dang, pnt);
     end;
     
   end;
