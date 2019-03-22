@@ -2,12 +2,12 @@
 
 interface
 
-{$reference System.Windows.Forms.dll}
-uses System.Windows.Forms;
-
 procedure ShowCriticalError(e: Exception; title: string);
 
 implementation
+
+{$reference System.Windows.Forms.dll}
+uses System.Windows.Forms;
 
 procedure TryShowMB(s1, s2: string) :=
 MessageBox.Show(s2, s1);
@@ -39,10 +39,11 @@ begin
   foreach var sm in Arr(TryShowMB, TrySaveLog) do
   try
     sm(title, text);
-    Halt;
+    break;
   except
   end;
   
+  Halt;
 end;
 
 end.

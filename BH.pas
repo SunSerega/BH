@@ -9,7 +9,7 @@ uses System.Windows.Forms;
 
 procedure ApplyCommandLineArgs;
 begin
-  
+  var ToDo := 0;
 end;
 
 procedure CheckPrev;

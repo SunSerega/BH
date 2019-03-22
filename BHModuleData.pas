@@ -10,6 +10,7 @@ uses System.Drawing;
 uses System.Reflection;
 
 uses MiscData;
+uses GData;
 
 type
   BHModule = abstract class
@@ -37,7 +38,7 @@ type
     
     
     ///Standard settings load start
-    ///It load's value of "Runing" from setting "Active",
+    ///It load's value of property "Runing" from setting "Active",
     ///and add's "Active" to used settings list
     ///Return's true if "Active" setting was corrupted (or missing) and therefore recreated
     ///Default value of "Active" is "True"
@@ -100,7 +101,7 @@ type
     
     {$resource 'Icons\default module icon.bmp'}
     ///Must return System.Drawing.Image that represents module
-    public property Icon: Bitmap read new Bitmap(Assembly.GetExecutingAssembly.GetManifestResourceStream('default module icon.bmp')); virtual;
+    public property Icon: Bitmap read new Bitmap(Assembly.GetCallingAssembly.GetManifestResourceStream('default module icon.bmp')); virtual;
     
     {$endregion MainBody}
     
@@ -120,7 +121,8 @@ type
     private static function LoadSettings(var Settings: Dictionary<string, Dictionary<string, string>>): boolean;
     begin
       
-      if System.IO.File.Exists('settings (backup).dat') then
+      var fi := new System.IO.FileInfo('settings (backup).dat');
+      if fi.Exists and (fi.Length<>0) then
       begin
         System.IO.File.Copy('settings (backup).dat', 'settings.dat', true);
         System.IO.File.Delete('settings (backup).dat');
@@ -254,6 +256,14 @@ type
     {$endregion Misc}
     
   end;
+  
+  Image = GData.Image;
+  Painter = GData.Painter;
+  
+  MenuBase = GData.MenuBase;
+  Menu<T> = GData.Menu<T>;
+  
+  CircleMenu = GData.CircleMenu;
   
 implementation
 

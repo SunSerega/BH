@@ -32,3 +32,5 @@ Any BHModule MUST override:
 
 ---
 </details>
+
+If something goes horribly wrong - press B + H + Esc, it would halt BH process in no more than 200ms

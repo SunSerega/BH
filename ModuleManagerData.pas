@@ -9,7 +9,7 @@ type
     while true do
     begin
       
-      //ToDo
+      var ToDo := 0;
       
       Sleep(10000);
       
