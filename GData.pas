@@ -88,8 +88,11 @@ type
   end;
   
   //ToDo прозрачность картинок не работает
+  //ToDo у всего должны быть варианты: [Draw/Fill]Name[/Rough]. Для Fill ещё перегрузка с лямбдой
+  //ToDo для залития кругов не надо высчитывать константы внутри. это МНОГО ДОРОГИХ лишних вычислений
   ///BH alternative for System.Drawing.Graphics
-  Painter = sealed class(System.IDisposable)
+  ///You can derive from this class to extend functionality
+  Painter = class(System.IDisposable)
     
     //ToDo Debug
     public static function GetKeyState(nVirtKey: byte): byte;
@@ -97,13 +100,13 @@ type
     
     {$region field's}
     
-    private hnd: System.Runtime.InteropServices.GCHandle;
+    protected hnd: System.Runtime.InteropServices.GCHandle;
     
-    private bmp: System.Drawing.Bitmap;
-    private bmp_data: System.Drawing.Imaging.BitmapData;
+    protected bmp: System.Drawing.Bitmap;
+    protected bmp_data: System.Drawing.Imaging.BitmapData;
     
-    private buff: System.IntPtr;
-    private buff_w, buff_h, buff_stride: integer;
+    protected buff: System.IntPtr;
+    protected buff_w, buff_h, buff_stride: integer;
     
     {$endregion field's}
     
@@ -150,14 +153,34 @@ type
     
     {$endregion constructor's}
     
-    {$region Pixel's}
+    {$region Misc}
     
-    private function GetAdr(x,y: integer) :=
+    protected function GetAdr(x,y: integer) :=
     buff + (y*buff_stride + x*4);
     
+    public procedure Save(fname: string);
+    begin
+      if self.bmp <> nil then
+      begin
+        bmp.Save(fname);
+        exit;
+      end;
+      
+      var bmp := new System.Drawing.Bitmap(buff_w,buff_h);
+      var tpnt := new Painter(bmp);
+      tpnt.DrawPicture(0,0,self);
+      tpnt.Dispose;
+      
+      bmp.Save(fname);
+    end;
     
+    {$endregion Misc}
     
-    private function GetPixel(adr: pointer): System.ValueTuple<byte,byte,byte,byte>;
+    {$region Pixel's}
+    
+    {$region GetPixel}
+    
+    protected function GetPixel(adr: pointer): System.ValueTuple<byte,byte,byte,byte>;
     begin
       System.Buffer.MemoryCopy(
         adr, @Result,
@@ -181,7 +204,7 @@ type
       Result := GetPixel(x,y);
     end;
     
-    private function GetFloatPixelOrEmpty(x,y: integer): System.ValueTuple<real,real,real,real>;
+    protected function GetFloatPixelOrEmpty(x,y: integer): System.ValueTuple<real,real,real,real>;
     begin
       if x<0 then exit;
       if y<0 then exit;
@@ -194,8 +217,8 @@ type
       Result.Item4 := px.Item4/255;
     end;
     
-    //for draw pict with float x,y and no w,h
-    private function GetAveragePixel(x,y: integer; a1,a2,a3,a4: real): System.ValueTuple<real,real,real,real>;
+    ///for draw pict with float x,y and no w,h
+    protected function GetAveragePixelOf4(x,y: integer; a1,a2,a3,a4: real): System.ValueTuple<real,real,real,real>;
     begin
       
       var px1 := GetFloatPixelOrEmpty(x,   y  );
@@ -222,7 +245,7 @@ type
       //writeln(Result);
     end;
     
-    private procedure AddPxToAvr(var res: System.ValueTuple<real,real,real,real>; px: System.ValueTuple<real,real,real,real>; k: real);
+    protected procedure AddPxToAvr(var res: System.ValueTuple<real,real,real,real>; px: System.ValueTuple<real,real,real,real>; k: real);
     begin
       var ck := px.Item4 * k;
       
@@ -346,7 +369,9 @@ type
       Result.Item4 /= ks;
     end;
     
+    {$endregion GetPixel}
     
+    {$region SetPixel}
     
     ///Set's color of pixel at (x; y) to P-BGRA format color
     public procedure SetPixel(x,y: integer; cp: pointer);
@@ -369,9 +394,11 @@ type
     ///So hex value of FFFF00FF would be purple, as if it was in ARGB
     public procedure SetPixel(x,y: integer; c: integer) := SetPixel(x,y, @c);
     
+    {$endregion SetPixel}
     
+    {$region AlterPixel}
     
-    private procedure AlterPixel(adr: pointer; cb,cg,cr,ca: real);
+    protected procedure AlterPixel(adr: pointer; cb,cg,cr,ca: real);
     begin
       var px: System.ValueTuple<byte,byte,byte,byte>;
       
@@ -395,13 +422,23 @@ type
       
     end;
     
-    ///Changes color of pixel at (x,y)
-    ///ca,cr,cg and cb values must be in [0;1) range
-    ///Formula used here: px.r += (cr-px.r) * ca;
+    ///Changes color of pixel at (x,y), applying BGRA color stored in {cb,cg,cr,ca}
+    ///All color components must be in [0;1) range
+    ///Formula used here: px.t += (ct-px.t) * (ca + (1-px.a) );
     public procedure AlterPixel(x,y: integer; cb,cg,cr,ca: real) :=
     AlterPixel(pointer(GetAdr(x,y)), cb,cg,cr,ca);
     
+    ///Changes color of pixel at (x,y), applying BGRA color stored in c
+    ///All color components must be in [0;1) range
+    ///Formula used here: px.t += (ct-px.t) * (ca + (1-px.a) );
+    public procedure AlterPixel(x,y: integer; c: System.ValueTuple<real,real,real,real>) :=
+    AlterPixel(x,y, c.Item1,c.Item2,c.Item3, c.Item4);
+    
+    {$endregion AlterPixel}
+    
     {$endregion Pixel's}
+    
+    {$region Fill}
     
     ///Set's color of all pixel's to P-BGRA format color
     public procedure Fill(cp: pointer);
@@ -434,6 +471,8 @@ type
     
     ///Set's color of all pixel's in BGRA format stored in 32-bit integer
     public procedure Fill(c: integer) := Fill(@c);
+    
+    {$endregion Fill}
     
     {$region Line's}
     
@@ -486,19 +525,353 @@ type
     
     {$endregion Line's}
     
+    {$region Round Objects}
+    
     {$region Circle}
     
-    public procedure DrawCircle;
+    public procedure DrawCircle(x,y, wr,hr: real; cb,cg,cr,ca: real);
     begin
-      var ToDo := 0;
+      
+      for var iy := Max( 0, Floor(y-hr)-1 ) to Min( Ceil(y+hr)+1, self.buff_h-1 ) do
+      begin
+        var x_sq := ( 1 - sqr( (iy-y)/hr ) );
+        if x_sq<0 then continue;
+        var dx := x_sq.Sqrt*wr;
+        
+        var ix := Round(x-dx);
+        if ix<0            then ix := 0 else
+        if ix>=self.buff_w then ix := self.buff_w-1;
+        
+        var rx,ry, k: real;
+        ry := iy-y;
+        
+        var curr_x := ix;
+        while curr_x>0 do
+        begin
+          
+          rx := curr_x-x;
+          
+          k := 1-
+            Sqrt( Sqr(rx) + Sqr(ry) ) *
+            abs(1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) );
+          
+          if k<0 then break;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x -= 1;
+        end;
+        if curr_x=ix then continue;
+        
+        curr_x := ix+1;
+        while curr_x<self.buff_w do
+        begin
+          
+          rx := curr_x-x;
+          
+          k := 1-
+            Sqrt( Sqr(rx) + Sqr(ry) ) *
+            abs(1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) );
+          
+          if k<0 then break;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x += 1;
+        end;
+        if curr_x>x then continue;
+        
+        ix := Round(x+dx);
+        if ix<0            then ix := 0 else
+        if ix>=self.buff_w then ix := self.buff_w-1;
+        
+        curr_x := ix;
+        while curr_x>0 do
+        begin
+          
+          rx := curr_x-x;
+          
+          k := 1-
+            Sqrt( Sqr(rx) + Sqr(ry) ) *
+            abs(1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) );
+          
+          if k<0 then break;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x -= 1;
+        end;
+        if curr_x=ix then continue;
+        
+        curr_x := ix+1;
+        while curr_x<self.buff_w do
+        begin
+          
+          rx := curr_x-x;
+          
+          k := 1-
+            Sqrt( Sqr(rx) + Sqr(ry) ) *
+            abs(1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) );
+          
+          if k<0 then break;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x += 1;
+        end;
+        
+      end;
+      
     end;
     
-    public procedure FillCircle;
+    public procedure FillCircle(x,y, wr,hr: real; cb,cg,cr,ca: real);
     begin
-      var ToDo := 0;
+      
+      for var iy := Max( 0, Floor(y-hr) ) to Min( Ceil(y+hr), self.buff_h-1 ) do
+      begin
+        var x_sq := ( 1 - sqr( (iy-y)/hr ) );
+        if x_sq<0 then continue;
+        var dx := x_sq.Sqrt*wr;
+        
+        var ix := Round(x-dx);
+        if ix<0            then ix := 0 else
+        if ix>=self.buff_w then ix := self.buff_w-1;
+        
+        var rx,ry, k: real;
+        ry := iy-y;
+        
+        var curr_x := ix;
+        while curr_x>0 do
+        begin
+          
+          rx := curr_x-x;
+          
+          k := 1-
+            Sqrt( Sqr(rx) + Sqr(ry) ) *
+            (1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) );
+          
+          if k<0 then break;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x -= 1;
+        end;
+        if curr_x=ix then continue;
+        
+        curr_x := ix+1;
+        
+        while curr_x<self.buff_w do
+        begin
+          
+          rx := curr_x-x;
+          
+          var l_sq := Sqr(rx) + Sqr(ry);
+          k :=
+            l_sq<0.5?(
+              1
+            ):(
+              1 -
+              l_sq.Sqrt *
+              (1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) )
+            );
+          
+          if k<0 then break;
+          if k>1 then k := 1;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x += 1;
+        end;
+        
+      end;
+      
     end;
     
     {$endregion Circle}
+    
+    {$region Donut}
+    
+    public procedure FillDonut(x,y, wr,hr, iwr,ihr: real; cb,cg,cr,ca: real);
+    begin
+      
+      for var iy := Max( 0, Floor(y-hr) ) to Min( Ceil(y+hr), self.buff_h-1 ) do
+      begin
+        var x_sq := ( 1 - sqr( (iy-y)/hr ) );
+        if x_sq<0 then continue;
+        var dx := x_sq.Sqrt*wr;
+        
+        var ix := Round(x-dx);
+        if ix<0            then ix := 0 else
+        if ix>=self.buff_w then ix := self.buff_w-1;
+        
+        var rx,ry, k: real;
+        ry := iy-y;
+        
+        var curr_x := ix;
+        while curr_x>0 do
+        begin
+          
+          rx := curr_x-x;
+          
+          k := 1-
+            Sqrt( Sqr(rx) + Sqr(ry) ) *
+            (1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) );
+          
+          if k<0 then break;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x -= 1;
+        end;
+        if curr_x=ix then continue;
+        
+        curr_x := ix+1;
+        
+        x_sq := ( 1 - sqr( (iy-y)/ihr ) );
+        if x_sq>0 then
+        begin
+          
+          while curr_x<self.buff_w do
+          begin
+            
+            rx := curr_x-x;
+            
+            var l_sq := Sqr(rx) + Sqr(ry);
+            k :=
+              l_sq<0.5?(
+                1
+              ):(
+                1 -
+                l_sq.Sqrt *
+                (1 / Sqrt( Sqr(rx/iwr) + Sqr(ry/ihr) ) - 1)
+              );
+            
+            if k<0 then break;
+            if k>1 then k := 1;
+            
+            self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+            
+            curr_x += 1;
+          end;
+          if curr_x=self.buff_w then continue;
+          
+          dx :=x_sq.Sqrt*iwr;
+          
+          ix := Round(x+dx);
+          if ix<0            then ix := 0 else
+          if ix>=self.buff_w then ix := self.buff_w-1;
+          
+          curr_x := ix;
+          while curr_x>0 do
+          begin
+            
+            rx := curr_x-x;
+            
+            var l_sq := Sqr(rx) + Sqr(ry);
+            k :=
+              l_sq<0.5?(
+                1
+              ):(
+                1 -
+                l_sq.Sqrt *
+                (1 / Sqrt( Sqr(rx/iwr) + Sqr(ry/ihr) ) - 1)
+              );
+            
+            if k<0 then break;
+            if k>1 then k := 1;
+            
+            self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+            
+            curr_x -= 1;
+          end;
+          
+          curr_x := ix+1;
+        end;
+        
+        while curr_x<self.buff_w do
+        begin
+          
+          rx := curr_x-x;
+          
+          var l_sq := Sqr(rx) + Sqr(ry);
+          k :=
+            l_sq<0.5?(
+              1
+            ):(
+              1 -
+              l_sq.Sqrt *
+              (1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) )
+            );
+          
+          if k<0 then break;
+          if k>1 then k := 1;
+          
+          self.AlterPixel( curr_x, iy, cb,cg,cr, ca*k );
+          
+          curr_x += 1;
+        end;
+        
+      end;
+      
+    end;
+    
+    public procedure FillRoughDonut(x,y, wr,hr, iwr,ihr: real; get_px: (integer,integer)->System.ValueTuple<real,real,real,real>);
+    begin
+      
+      for var iy := Max( 0, Floor(y-hr) ) to Min( Ceil(y+hr), self.buff_h-1 ) do
+      begin
+        var x_sq := ( 1 - sqr( (iy-y)/hr ) );
+        if x_sq<0 then continue;
+        var dx := x_sq.Sqrt * wr;
+        
+        var ix1 := Round(x-dx);
+        if ix1<0            then ix1 := 0 else
+        if ix1>=self.buff_w then ix1 := self.buff_w-1;
+        
+        var ix2 := Round(x+dx);
+        if ix2<0            then ix2 := 0 else
+        if ix2>=self.buff_w then ix2 := self.buff_w-1;
+        
+        if abs(y-iy) >= ihr then
+        begin
+          
+          for var ix := ix1 to ix2 do
+            self.AlterPixel(ix,iy, get_px(ix,iy) );
+          
+        end else
+        begin
+          
+          dx := Sqrt( 1 - sqr( (iy-y)/ihr ) ) * iwr;
+          
+          var iix1 := Round(x-dx)-1;
+          if iix1<0            then iix1 := 0 else
+          if iix1>=self.buff_w then iix1 := self.buff_w-1;
+          
+          var iix2 := Round(x+dx)+1;
+          if iix2<0            then iix2 := 0 else
+          if iix2>=self.buff_w then iix2 := self.buff_w-1;
+          
+          for var ix := ix1 to iix1 do
+            self.AlterPixel(ix,iy, get_px(ix,iy) );
+          
+          for var ix := iix2 to ix2 do
+            self.AlterPixel(ix,iy, get_px(ix,iy) );
+          
+        end;
+        
+      end;
+      
+    end;
+    
+    {$endregion Donut}
+    
+    {$region Arch}
+    
+    
+    
+    {$endregion Arch}
+    
+    {$endregion Round Objects}
     
     {$region Picture}
     
@@ -617,7 +990,7 @@ type
       for var dy := 0 to pnt.buff_h do
         for var dx := 0 to pnt.buff_w do
         begin
-          var px := pnt.GetAveragePixel(dx,dy, a1,a2,a3,a4);
+          var px := pnt.GetAveragePixelOf4(dx,dy, a1,a2,a3,a4);
           self.AlterPixel(ix+dx, iy+dy, px.Item1, px.Item2,px.Item3,px.Item4);
         end;
       
@@ -660,22 +1033,6 @@ type
     {$endregion Picture}
     
     {$region destructor's}
-    
-    public procedure Save(fname: string);
-    begin
-      if self.bmp <> nil then
-      begin
-        bmp.Save(fname);
-        exit;
-      end;
-      
-      var bmp := new System.Drawing.Bitmap(buff_w,buff_h);
-      var tpnt := new Painter(bmp);
-      tpnt.DrawPicture(0,0,self);
-      tpnt.Dispose;
-      
-      bmp.Save(fname);
-    end;
     
     public procedure Dispose;
     begin
