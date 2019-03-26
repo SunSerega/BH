@@ -174,6 +174,87 @@ type
       bmp.Save(fname);
     end;
     
+    private const FATP = 2520;
+    
+    private static function InitFAT_buff: array of real;
+    begin
+      Result := new real[FATP];
+      
+      for var i := 0 to FATP-1 do
+      begin
+        
+        // i = FATP / (dy/dx+1)
+        // i = FATP / ( -Cos(ang)/Sin(ang) +1)
+        // i = FATP / (-ctg(ang)+1)
+        // -ctg(ang) + 1 = FATP / i
+        // 1/tg(ang) = 1-FATP / i
+        // tg(ang) = 1 / (1-FATP / i)
+        // ang = ArcTan( 1 / (1-FATP / i) )
+        
+        Result[i] := -ArcTan( 1 / (1-FATP / i) )/2/Pi + 1/FATP/2/4;
+      end;
+      
+    end;
+    
+    private static FAT_buff := InitFAT_buff;
+    
+    ///Result is clockwise angle from (0;-1), in range [0,1)
+    ///Error is < 1/2520
+    public static function FastArcTan(dx,dy: real): real;
+    begin
+      
+      if dx=0 then
+      begin
+        
+        if dy<0 then Result := 0.00 else
+        if dy>0 then Result := 0.50 else
+          Result := real.NaN;
+        
+        exit;
+      end;
+      
+      if dy=0 then
+      begin
+        
+        if dx>0 then Result := 0.25 else
+        if dx<0 then Result := 0.75 else
+          Result := real.NaN;
+        
+        exit;
+      end;
+      
+      var k: real;
+      
+      if dx<0 then
+      begin
+        
+        if dy<0 then
+        begin
+          k := abs(dy/dx);
+          Result := FAT_buff[FATP - Ceil( FATP / (k+1) ) ] + 0.75;
+        end else
+        begin
+          k := abs(dy/dx);
+          Result := FAT_buff[ Ceil( FATP / (k+1) )-1 ] + 0.50;
+        end;
+        
+      end else
+      begin
+        
+        if dy<0 then
+        begin
+          k := abs(dy/dx);
+          Result := FAT_buff[ Ceil( FATP / (k+1) )-1 ];
+        end else
+        begin
+          k := abs(dy/dx);
+          Result := FAT_buff[FATP - Ceil( FATP / (k+1) ) ] + 0.25;
+        end;
+        
+      end;
+      
+    end;
+    
     {$endregion Misc}
     
     {$region Pixel's}
@@ -401,6 +482,21 @@ type
     protected procedure AlterPixel(adr: pointer; cb,cg,cr,ca: real);
     begin
       var px: System.ValueTuple<byte,byte,byte,byte>;
+      
+      if ca>0.999 then
+      begin
+        px.Item1 := System.Convert.ToByte(cb*255);
+        px.Item2 := System.Convert.ToByte(cb*255);
+        px.Item3 := System.Convert.ToByte(cb*255);
+        px.Item4 := 255;
+        
+        System.Buffer.MemoryCopy(
+          @px, adr,
+          4,4
+        );
+        
+        exit;
+      end;
       
       System.Buffer.MemoryCopy(
         adr, @px,
@@ -817,6 +913,7 @@ type
     
     public procedure FillRoughDonut(x,y, wr,hr, iwr,ihr: real; get_px: (integer,integer)->System.ValueTuple<real,real,real,real>);
     begin
+      //var sw := new System.Diagnostics.Stopwatch;
       
       for var iy := Max( 0, Floor(y-hr) ) to Min( Ceil(y+hr), self.buff_h-1 ) do
       begin
@@ -835,8 +932,16 @@ type
         if abs(y-iy) >= ihr then
         begin
           
+//          for var ix := ix1 to ix2 do self.AlterPixel(ix,iy, get_px(ix,iy) );
           for var ix := ix1 to ix2 do
-            self.AlterPixel(ix,iy, get_px(ix,iy) );
+          begin
+            //sw.Start;
+            var px := get_px(ix,iy);
+            //sw.Stop;
+            if px.Item4<0.001 then continue;
+            self.AlterPixel(ix,iy, px);
+          end;
+          
           
         end else
         begin
@@ -851,16 +956,32 @@ type
           if iix2<0            then iix2 := 0 else
           if iix2>=self.buff_w then iix2 := self.buff_w-1;
           
+//          for var ix := ix1 to iix1 do self.AlterPixel(ix,iy, get_px(ix,iy) );
+//          for var ix := iix2 to ix2 do self.AlterPixel(ix,iy, get_px(ix,iy) );
+          
           for var ix := ix1 to iix1 do
-            self.AlterPixel(ix,iy, get_px(ix,iy) );
+          begin
+            //sw.Start;
+            var px := get_px(ix,iy);
+            //sw.Stop;
+            if px.Item4<0.001 then continue;
+            self.AlterPixel(ix,iy, px);
+          end;
           
           for var ix := iix2 to ix2 do
-            self.AlterPixel(ix,iy, get_px(ix,iy) );
+          begin
+            //sw.Start;
+            var px := get_px(ix,iy);
+            //sw.Stop;
+            if px.Item4<0.001 then continue;
+            self.AlterPixel(ix,iy, px);
+          end;
           
         end;
         
       end;
       
+      //writeln('FillRoughDonut.get_px ', sw.Elapsed);
     end;
     
     {$endregion Donut}

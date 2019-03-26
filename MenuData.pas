@@ -1,6 +1,7 @@
 ﻿unit MenuData;
 
 uses GData;
+uses MiscData;
 
 //ToDo проверить issue
 // - #1880
@@ -12,7 +13,7 @@ type
   MenuBase = abstract class
     
     protected _owner, curr_child: MenuBase;
-    protected progress, prog_dir: integer;
+    protected oc_progress, oc_prog_dir: integer;
     
     
     
@@ -89,39 +90,50 @@ type
     //ToDo #1880, #1881
     private function lambda1(t: (MenuBase, CircleMenuData)) := t[1].BackColor;
     private clrs := sub_menus.ConvertAll(lambda1);
-    private d_cl := System.ValueTuple.Create(0.85,0.85,0.85, 1.0);
+    private d_cl := System.ValueTuple.Create(0.85,0.85,0.85, 0.0);
     private c := 0;
     private svd_dx, svd_dy: real;
+    //private sw: System.Diagnostics.Stopwatch;
     
     public procedure DrawOn(dx,dy: real; pnt: Painter); override;
     begin
       
       c := Max(MinMenus,sub_menus.Count);
-      if c and 1 = 0 then c += 1;
+      if c.IsEven then c += 1;
       
       svd_dx := dx;
       svd_dy := dy;
       
       clrs := sub_menus.ConvertAll(t->t[1].BackColor);
-      d_cl := System.ValueTuple.Create(0.85,0.85,0.85, 1.0);
       
+  //sw := System.Diagnostics.Stopwatch.Create;
       pnt.FillRoughDonut(
         dx,dy,
         R,R, iR,iR,
         (x,y)->
         begin
-          var ang := System.Math.Atan2(y-svd_dy,x-svd_dx);
-          //writeln((x-svd_dx,y-svd_dy,ang));
-          var i := Round((ang/Pi + 0.5)*c/2);
-          if i<0 then i += c;
+//          sw.Start;
+//          var ang := System.Math.Atan2(y-svd_dy,x-svd_dx);
+//          sw.Stop;
+//          var i := Round((ang/Pi + 0.5)*c/2);
+          
+          //sw.Start;
+          var ang := Painter.FastArcTan(x-svd_dx,y-svd_dy);
+          //sw.Stop;
+          var i := Round(ang*c);
+          
+          if i<0 then i += c else
+          if i>=c then i -= c;
           if i<clrs.Count then
             Result := clrs[i] else
             Result := d_cl;
+          
         end
       );
+  //writeln('DrawOn.FillRoughDonut ', sw.Elapsed);
       
-      pnt.DrawCircle(dx,dy, iR,iR, 0,0,0,0.5);
-      pnt.DrawCircle(dx,dy, R,R,   0,0,0,0.5);
+      pnt.DrawCircle(dx,dy, iR,iR, 0,0,0,1);
+      pnt.DrawCircle(dx,dy, R,R,   0,0,0,1);
       
       var dang := Pi*2/c;
       var ang := -dang/2;
@@ -135,7 +147,7 @@ type
         pnt.DrawLine(
           500 + iR*rx, 500 + iR*ry,
           500 +  R*rx, 500 +  R*ry,
-          0,0,0,0.5
+          0,0,0,1
         );
         
         Result := ang + dang;
