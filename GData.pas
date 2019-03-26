@@ -486,8 +486,8 @@ type
       if ca>0.999 then
       begin
         px.Item1 := System.Convert.ToByte(cb*255);
-        px.Item2 := System.Convert.ToByte(cb*255);
-        px.Item3 := System.Convert.ToByte(cb*255);
+        px.Item2 := System.Convert.ToByte(cg*255);
+        px.Item3 := System.Convert.ToByte(cr*255);
         px.Item4 := 255;
         
         System.Buffer.MemoryCopy(
