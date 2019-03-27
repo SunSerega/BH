@@ -10,7 +10,7 @@ uses System.Drawing;
 uses System.Reflection;
 
 uses MiscData;
-uses GData;
+uses GData, MenuData;
 
 type
   BHModule = abstract class
@@ -260,10 +260,11 @@ type
   Image = GData.Image;
   Painter = GData.Painter;
   
-  MenuBase = GData.MenuBase;
-  Menu<T> = GData.Menu<T>;
+  MenuBase = MenuData.MenuBase;
+  Menu<T> = MenuData.Menu<T>;
   
-  CircleMenu = GData.CircleMenu;
+  CircleMenuData = MenuData.CircleMenuData;
+  CircleMenu = MenuData.CircleMenu;
   
 implementation
 
@@ -348,6 +349,17 @@ try
     end;
     
     All.Add(nm.Name, nm);
+  end;
+  
+  if All.Count=0 then
+  begin
+    MessageBox.Show(
+      
+      'No modules were found'#10
+      'There is no reason to start BH without modules'
+      
+    );
+    Halt;
   end;
   
   {$endregion Load Modules}

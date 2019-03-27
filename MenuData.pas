@@ -1,4 +1,8 @@
 ﻿unit MenuData;
+//ToDo открытие CircleMenu должно быть менятся, если Owner имеет известный тип. К примеру для CircleMenu - это должно быть разворачивание
+//ToDo не выполнять Seal если оно уже начато. Но и сбрасывать прогресс если что то в меню было отредактированно
+//ToDo из Seal вызывать Seal под-меню
+//ToDo отменять открытие CircleMenu если в нём 0 под-меню
 
 uses GData;
 uses MiscData;
@@ -6,8 +10,15 @@ uses MiscData;
 //ToDo проверить issue
 // - #1880
 // - #1881
+// - #1890
 
 type
+  MenuNotSealedException = class(Exception)
+    
+    constructor :=
+    inherited Create('You need to call .Seal on menu before it can be drawn');
+    
+  end;
   
   ///Base type of Menu<MenuDataT>
   MenuBase = abstract class
@@ -20,6 +31,10 @@ type
     public property Owner: MenuBase read _owner;
     
     public procedure DrawOn(dx,dy: real; pnt: Painter); abstract;
+    
+    ///Starts anync caching of drawable parts of menu
+    ///You need to call this before menu would be drawn
+    public procedure Seal; abstract;
     
     
     
@@ -42,6 +57,8 @@ type
   
   DummyMenu = class(Menu<byte>)
     
+    public procedure Seal; override := exit;
+    
     public procedure DrawOn(dx,dy: real; pnt: Painter); override := exit;
     
   end;
@@ -49,10 +66,30 @@ type
   ///Container for data of CircleMenu sub-menu
   CircleMenuData = record
     
-    Miniature: Painter;
-    BackColor: System.ValueTuple<real,real,real,real>;
+    public Miniature: Painter;
+    public BackColor: System.ValueTuple<real,real,real,real>;
     
-    constructor(Miniature: Painter; BackColor: System.ValueTuple<real,real,real,real>);
+    private const ScaleCount = 10;
+    private const MaxScale = 1.2;
+    private sc_done := -1;
+    private scaled_arch := new System.Tuple<real, Painter>[ScaleCount];
+    
+    private prev_seal_thr: System.Threading.Thread;
+    
+    
+    
+    private procedure Seal(n, MCap: integer);
+    
+    private procedure AsyncSeal(n, MCap: integer);
+    begin
+      if prev_seal_thr<>nil then prev_seal_thr.Abort;
+      sc_done := 0;
+      
+      prev_seal_thr := new System.Threading.Thread(()->self.Seal(n, MCap));
+      prev_seal_thr.Start;
+    end;
+    
+    public constructor(Miniature: Painter; BackColor: System.ValueTuple<real,real,real,real>);
     begin
       self.Miniature := Miniature;
       self.BackColor := BackColor;
@@ -66,6 +103,15 @@ type
     public const R=450;
     public const iR=150;
     public const MinMenus=5;
+    
+    protected bg: Painter;
+    protected MCap: integer;
+    
+    protected const BgScaleCount=40;
+    protected bg_sc_done := -1;
+    protected scaled_bg := new System.Tuple<real, Painter>[BgScaleCount];
+    
+    private prev_seal_thr: System.Threading.Thread;
     
     
     
@@ -87,96 +133,169 @@ type
     public procedure AddMenu(m: MenuBase; Miniature: Image; BackColor: System.ValueTuple<real,real,real,real>) :=
     AddMenu(m, new CircleMenuData(new Painter(Miniature), BackColor));
     
+    
+    
     //ToDo #1880, #1881
     private function lambda1(t: (MenuBase, CircleMenuData)) := t[1].BackColor;
-    private clrs := sub_menus.ConvertAll(lambda1);
-    private d_cl := System.ValueTuple.Create(0.85,0.85,0.85, 0.0);
-    private c := 0;
-    private svd_dx, svd_dy: real;
-    //private sw: System.Diagnostics.Stopwatch;
+    private svd_shift: real;
+    private svd_clrs: List<System.ValueTuple<real,real,real,real>>;
+    private svd_def_cl: System.ValueTuple<real,real,real,real>;
+    
+    protected function GetScaledBg(sc: real; clrs: List<System.ValueTuple<real,real,real,real>>; def_cl: System.ValueTuple<real,real,real,real>): (real, Painter);
+    begin
+      var scR := R*sc;
+      var sciR := iR*sc;
+      
+      var w := Ceil(scR * 2);
+      var res := new Painter(new Image(w+1,w+1));
+      var shift := w/2;
+      
+      //ToDo #1880, #1881
+      svd_shift := shift;
+      svd_clrs := clrs;
+      svd_def_cl := def_cl;
+      
+      res.FillRoughDonut(
+        shift,shift,
+        scR,scR,
+        sciR,sciR,
+        (x,y)->
+        begin
+          var ang := Painter.FastArcTan(x-svd_shift,y-svd_shift);
+          var i := (Round(ang*MCap) + MCap) mod MCap;
+          
+          if i<svd_clrs.Count then
+            Result := svd_clrs[i] else
+            Result := svd_def_cl;
+          
+        end
+      );
+      
+      var dang := Pi*2/MCap;
+      var ang := -dang/2;
+      
+      //ToDo #1890
+      //loop clrs.Count<MCap ? clrs.Count+1 : MCap do
+      var temp_loop_var := clrs.Count<MCap ? clrs.Count+1 : MCap;
+      while temp_loop_var>0 do
+      begin
+        var kx := Sin(ang);
+        var ky := -Cos(ang);
+        
+        res.DrawLine(
+          shift+kx*sciR,  shift+ky*sciR,
+          shift+kx*scR,   shift+ky*scR,
+          0,0,0,1
+        );
+        
+        ang += dang;
+        temp_loop_var-=1;
+      end;
+      
+      ang := 0;
+      var pict_r := Min(
+        (R-iR)/2,
+        R / (1 + 1/sin(Pi/MCap))
+      );
+      var pict_dist := R-pict_r;
+      var pict_shift := pict_r / sqrt(2);
+      var pict_sz := pict_shift*2;
+      
+      temp_loop_var := 0;
+      while temp_loop_var<sub_menus.Count do
+      begin
+        
+        res.DrawPicture(
+          shift+Sin(ang)*pict_dist-pict_shift, shift-Cos(ang)*pict_dist-pict_shift,
+          pict_sz,pict_sz,
+          sub_menus[temp_loop_var][1].Miniature
+        );
+        
+        ang += dang;
+        temp_loop_var += 1;
+      end;
+      
+      res.DrawCircle(
+        shift,shift,
+        scR,scR,
+        0,0,0,1
+      );
+      
+      res.DrawCircle(
+        shift,shift,
+        sciR,sciR,
+        0,0,0,1
+      );
+      
+      Result := (shift, res);
+      //res.Save($'Temp\bg scale {Round(sc*R)}.bmp');
+    end;
+    
+    //ToDo #1890
+    private svd_is_clrs: List<System.ValueTuple<real,real,real,real>>;
+    private svd_is_def_cl: System.ValueTuple<real,real,real,real>;
+    
+    //ToDo #1890
+    private procedure InnerSeal :=
+    for var i := BgScaleCount-1 downto 0 do
+    begin
+      if i=0 then
+        scaled_bg := scaled_bg;
+      
+      scaled_bg[i] := GetScaledBg( (i+1)/(BgScaleCount+1), svd_is_clrs, svd_is_def_cl);
+      bg_sc_done := BgScaleCount-i;
+    end;
+    
+    ///Starts anync caching of drawable parts of menu
+    ///You need to call this before menu would be drawn
+    public procedure Seal; override;
+    begin
+      if prev_seal_thr<>nil then prev_seal_thr.Abort;
+      
+      MCap := Max(MinMenus, sub_menus.Count);
+      //if MCap.IsEven then MCap += 1;
+      
+      var clrs := sub_menus.ConvertAll(lambda1);
+      var def_cl := System.ValueTuple.Create(0.85,0.85,0.85, 0.0);
+      
+      bg := GetScaledBg(1, clrs, def_cl)[1];
+      
+      svd_is_clrs := clrs;
+      svd_is_def_cl := def_cl;
+      
+      for var i := 0 to sub_menus.Count-1 do
+        sub_menus[i][1].AsyncSeal(i, MCap);
+      
+      bg_sc_done := 0;
+      
+      prev_seal_thr := new System.Threading.Thread(InnerSeal);
+      prev_seal_thr.Start;
+    end;
     
     public procedure DrawOn(dx,dy: real; pnt: Painter); override;
     begin
       
-      c := Max(MinMenus,sub_menus.Count);
-      if c.IsEven then c += 1;
+      pnt.DrawPicture(dx-R,dy-R, bg);
       
-      svd_dx := dx;
-      svd_dy := dy;
-      
-      clrs := sub_menus.ConvertAll(t->t[1].BackColor);
-      
-  //sw := System.Diagnostics.Stopwatch.Create;
-      pnt.FillRoughDonut(
-        dx,dy,
-        R,R, iR,iR,
-        (x,y)->
-        begin
-//          sw.Start;
-//          var ang := System.Math.Atan2(y-svd_dy,x-svd_dx);
-//          sw.Stop;
-//          var i := Round((ang/Pi + 0.5)*c/2);
-          
-          //sw.Start;
-          var ang := Painter.FastArcTan(x-svd_dx,y-svd_dy);
-          //sw.Stop;
-          var i := Round(ang*c);
-          
-          if i<0 then i += c else
-          if i>=c then i -= c;
-          if i<clrs.Count then
-            Result := clrs[i] else
-            Result := d_cl;
-          
-        end
-      );
-  //writeln('DrawOn.FillRoughDonut ', sw.Elapsed);
-      
-      pnt.DrawCircle(dx,dy, iR,iR, 0,0,0,1);
-      pnt.DrawCircle(dx,dy, R,R,   0,0,0,1);
-      
-      var dang := Pi*2/c;
-      var ang := -dang/2;
-      
-      var NextLine: (real,real, Painter)->real := (ang, dang, pnt)->
-      begin
-        
-        var rx := Sin(ang);
-        var ry := -Cos(ang);
-        
-        pnt.DrawLine(
-          500 + iR*rx, 500 + iR*ry,
-          500 +  R*rx, 500 +  R*ry,
-          0,0,0,1
-        );
-        
-        Result := ang + dang;
-        
-      end;
-      
-      var NextImage: procedure := ()->
-      begin
-        
-      end;
-      
-      var enm: IEnumerator<CircleMenuData> := sub_menus.Select(t->t[1]).GetEnumerator();
-      
-      if not enm.MoveNext then exit;
-      ang := NextLine(ang,dang, pnt);
-      NextImage;
-      
-      ang := NextLine(ang,dang, pnt);
-      if not enm.MoveNext then exit;
-      
-      while enm.MoveNext do
-      begin
-        ang := NextLine(ang,dang, pnt);
-        NextImage;
-      end;
-      
-      if c>sub_menus.Count then NextLine(ang,dang, pnt);
     end;
     
   end;
+
+procedure CircleMenuData.Seal(n, MCap: integer);
+begin
+  for var i := 0 to ScaleCount-1 do
+  begin
+    var sc := MaxScale - (MaxScale-1) * (i+1)/ScaleCount;
+    
+    var w := Ceil(CircleMenu.R * sc * 2);
+    var res := new Painter(new Image(w+1,w+1));
+    var shift := w/2;
+    
+    var ToDo := 0;
+    
+    self.scaled_arch[i] := (shift, res);
+    sc_done := i+1;
+  end;
+end;
 
 end.

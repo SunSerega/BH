@@ -90,6 +90,7 @@ type
   //ToDo прозрачность картинок не работает
   //ToDo у всего должны быть варианты: [Draw/Fill]Name[/Rough]. Для Fill ещё перегрузка с лямбдой
   //ToDo для залития кругов не надо высчитывать константы внутри. это МНОГО ДОРОГИХ лишних вычислений
+  //ToDo FillDonut сломано, но предыдущее ToDo его всё равно исправило бы
   ///BH alternative for System.Drawing.Graphics
   ///You can derive from this class to extend functionality
   Painter = class(System.IDisposable)
@@ -384,7 +385,7 @@ type
           //AddPxToAvr(Result, pxls[0,0], ks );
           
           Result := pxls[0,0];
-          Result.Item4 *= ks;
+          //Result.Item4 *= ks;//if only one px - it painted the whole result px, no reason to change Alpha
           exit;
           
         end else
@@ -628,7 +629,7 @@ type
     public procedure DrawCircle(x,y, wr,hr: real; cb,cg,cr,ca: real);
     begin
       
-      for var iy := Max( 0, Floor(y-hr)-1 ) to Min( Ceil(y+hr)+1, self.buff_h-1 ) do
+      for var iy := Max( 0, Floor(y-hr)-10 ) to Min( Ceil(y+hr)+10, self.buff_h-1 ) do
       begin
         var x_sq := ( 1 - sqr( (iy-y)/hr ) );
         if x_sq<0 then continue;
@@ -642,7 +643,7 @@ type
         ry := iy-y;
         
         var curr_x := ix;
-        while curr_x>0 do
+        while curr_x>=0 do
         begin
           
           rx := curr_x-x;
@@ -682,7 +683,7 @@ type
         if ix>=self.buff_w then ix := self.buff_w-1;
         
         curr_x := ix;
-        while curr_x>0 do
+        while curr_x>=0 do
         begin
           
           rx := curr_x-x;
@@ -737,7 +738,7 @@ type
         ry := iy-y;
         
         var curr_x := ix;
-        while curr_x>0 do
+        while curr_x>=0 do
         begin
           
           rx := curr_x-x;
@@ -787,7 +788,7 @@ type
     
     {$region Donut}
     
-    public procedure FillDonut(x,y, wr,hr, iwr,ihr: real; cb,cg,cr,ca: real);
+    public procedure FillDonut_Broken(x,y, wr,hr, iwr,ihr: real; cb,cg,cr,ca: real);
     begin
       
       for var iy := Max( 0, Floor(y-hr) ) to Min( Ceil(y+hr), self.buff_h-1 ) do
@@ -804,7 +805,7 @@ type
         ry := iy-y;
         
         var curr_x := ix;
-        while curr_x>0 do
+        while curr_x>=0 do
         begin
           
           rx := curr_x-x;
@@ -837,9 +838,15 @@ type
               l_sq<0.5?(
                 1
               ):(
-                1 -
-                l_sq.Sqrt *
-                (1 / Sqrt( Sqr(rx/iwr) + Sqr(ry/ihr) ) - 1)
+                Min(
+                  1 -
+                  l_sq.Sqrt *
+                  (1 / Sqrt( Sqr(rx/iwr) + Sqr(ry/ihr) ) - 1)
+                ,
+                  1 -
+                  l_sq.Sqrt *
+                  (1 - 1 / Sqrt( Sqr(rx/wr) + Sqr(ry/hr) ) )
+                )
               );
             
             if k<0 then break;
@@ -858,7 +865,7 @@ type
           if ix>=self.buff_w then ix := self.buff_w-1;
           
           curr_x := ix;
-          while curr_x>0 do
+          while curr_x>=0 do
           begin
             
             rx := curr_x-x;
@@ -915,21 +922,21 @@ type
     begin
       //var sw := new System.Diagnostics.Stopwatch;
       
-      for var iy := Max( 0, Floor(y-hr) ) to Min( Ceil(y+hr), self.buff_h-1 ) do
+      for var iy := Max( 0, Floor(y-hr-1) ) to Min( Ceil(y+hr+1), self.buff_h-1 ) do
       begin
         var x_sq := ( 1 - sqr( (iy-y)/hr ) );
         if x_sq<0 then continue;
         var dx := x_sq.Sqrt * wr;
         
-        var ix1 := Round(x-dx);
+        var ix1 := Ceil(x-dx);
         if ix1<0            then ix1 := 0 else
         if ix1>=self.buff_w then ix1 := self.buff_w-1;
         
-        var ix2 := Round(x+dx);
+        var ix2 := Floor(x+dx);
         if ix2<0            then ix2 := 0 else
         if ix2>=self.buff_w then ix2 := self.buff_w-1;
         
-        if abs(y-iy) >= ihr then
+        if abs(y-iy) > ihr then
         begin
           
 //          for var ix := ix1 to ix2 do self.AlterPixel(ix,iy, get_px(ix,iy) );
@@ -948,11 +955,11 @@ type
           
           dx := Sqrt( 1 - sqr( (iy-y)/ihr ) ) * iwr;
           
-          var iix1 := Round(x-dx)-1;
+          var iix1 := Ceil(x-dx)-1;
           if iix1<0            then iix1 := 0 else
           if iix1>=self.buff_w then iix1 := self.buff_w-1;
           
-          var iix2 := Round(x+dx)+1;
+          var iix2 := Floor(x+dx)+1;
           if iix2<0            then iix2 := 0 else
           if iix2>=self.buff_w then iix2 := self.buff_w-1;
           
