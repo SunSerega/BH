@@ -1,4 +1,5 @@
 ﻿unit MenuData;
+
 //ToDo открытие CircleMenu должно быть менятся, если Owner имеет известный тип. К примеру для CircleMenu - это должно быть разворачивание
 //ToDo не выполнять Seal если оно уже начато. Но и сбрасывать прогресс если что то в меню было отредактированно
 //ToDo из Seal вызывать Seal под-меню
@@ -25,6 +26,7 @@ type
     
     protected _owner, curr_child: MenuBase;
     protected oc_progress, oc_prog_dir: integer;
+    protected static curr_menu: MenuBase;
     
     
     
@@ -37,6 +39,10 @@ type
     public procedure Seal; abstract;
     
     
+    
+    public static procedure GTickCurrent;
+    
+    public static procedure DrawCurrent(pnt: Painter);
     
     public static event UnProcessedEsc: procedure;
     
@@ -78,14 +84,14 @@ type
     
     
     
-    private procedure Seal(n, MCap: integer);
+    private procedure Seal(R,iR: real; n, MCap: integer);
     
-    private procedure AsyncSeal(n, MCap: integer);
+    private procedure AsyncSeal(R,iR: real; n, MCap: integer);
     begin
       if prev_seal_thr<>nil then prev_seal_thr.Abort;
       sc_done := 0;
       
-      prev_seal_thr := new System.Threading.Thread(()->self.Seal(n, MCap));
+      prev_seal_thr := new System.Threading.Thread(()->self.Seal(R,iR, n, MCap));
       prev_seal_thr.Start;
     end;
     
@@ -100,9 +106,9 @@ type
   ///Menu in which all sub-menu's placed in circle
   CircleMenu = class(Menu<CircleMenuData>)
     
-    public const R=450;
-    public const iR=150;
     public const MinMenus=5;
+    
+    protected R,iR: real;
     
     protected bg: Painter;
     protected MCap: integer;
@@ -112,6 +118,16 @@ type
     protected scaled_bg := new System.Tuple<real, Painter>[BgScaleCount];
     
     private prev_seal_thr: System.Threading.Thread;
+    
+    
+    
+    private constructor := raise new System.NotSupportedException;
+    
+    private constructor(R, iR: real);
+    begin
+      self.R := R;
+      self.iR := iR;
+    end;
     
     
     
@@ -264,7 +280,7 @@ type
       svd_is_def_cl := def_cl;
       
       for var i := 0 to sub_menus.Count-1 do
-        sub_menus[i][1].AsyncSeal(i, MCap);
+        sub_menus[i][1].AsyncSeal(R,iR, i, MCap);
       
       bg_sc_done := 0;
       
@@ -281,13 +297,23 @@ type
     
   end;
 
-procedure CircleMenuData.Seal(n, MCap: integer);
+static procedure MenuBase.GTickCurrent;
+begin
+  var ToDo := 0;
+end;
+
+static procedure MenuBase.DrawCurrent(pnt: Painter);
+begin
+  var ToDo := 0;
+end;
+
+procedure CircleMenuData.Seal(R,iR: real; n, MCap: integer);
 begin
   for var i := 0 to ScaleCount-1 do
   begin
     var sc := MaxScale - (MaxScale-1) * (i+1)/ScaleCount;
     
-    var w := Ceil(CircleMenu.R * sc * 2);
+    var w := Ceil(R * sc * 2);
     var res := new Painter(new Image(w+1,w+1));
     var shift := w/2;
     

@@ -1,7 +1,5 @@
 ﻿{$apptype windows}
 
-{$reference BHModuleData.dll}
-
 uses BHFormData;
 uses ModuleManagerData;
 

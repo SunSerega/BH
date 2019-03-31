@@ -175,6 +175,8 @@ type
       bmp.Save(fname);
     end;
     
+    {$region FAT}
+    
     private const FATP = 2520;
     
     private static function InitFAT_buff: array of real;
@@ -253,6 +255,39 @@ type
         end;
         
       end;
+      
+    end;
+    
+    {$endregion FAT}
+    
+    ///adress, value, length
+    protected static MemFill: Action3<System.IntPtr, byte, integer>;
+    
+    static constructor;
+    begin
+      
+      var dynamicMethod := new System.Reflection.Emit.DynamicMethod(
+        'MemFill',
+        System.Reflection.MethodAttributes.Public or System.Reflection.MethodAttributes.Static,
+        System.Reflection.CallingConventions.Standard,
+        nil,
+        new System.Type[](
+          typeof(System.IntPtr),
+          typeof(byte),
+          typeof(integer)
+        ),
+        typeof(Painter),
+        true
+      );
+      
+      var generator := dynamicMethod.GetILGenerator;
+      generator.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+      generator.Emit(System.Reflection.Emit.OpCodes.Ldarg_1);
+      generator.Emit(System.Reflection.Emit.OpCodes.Ldarg_2);
+      generator.Emit(System.Reflection.Emit.OpCodes.Initblk);
+      generator.Emit(System.Reflection.Emit.OpCodes.Ret);
+      
+      MemFill := Action3&<System.IntPtr, byte, integer>(dynamicMethod.CreateDelegate(typeof(Action3<System.IntPtr, byte, integer>)));
       
     end;
     
@@ -537,37 +572,47 @@ type
     
     {$region Fill}
     
-    ///Set's color of all pixel's to P-BGRA format color
+    ///Fill's all pixel's with P-BGRA format color
     public procedure Fill(cp: pointer);
     begin
-      var curr_row_pos := buff;
       
-      loop buff_h do
+      var curr_pos := buff;
+      loop buff_w do
       begin
-        var curr_pos := curr_row_pos;
         
-        loop buff_w do
-        begin
-          
-          System.Buffer.MemoryCopy(cp,pointer(curr_pos), 4,4);
-          
-          curr_pos := curr_pos + 4;
-        end;
+        System.Buffer.MemoryCopy(cp,pointer(curr_pos), 4,4);
         
-        curr_row_pos := curr_row_pos + buff_stride;
+        curr_pos := curr_pos + 4;
+      end;
+      
+      curr_pos := buff;
+      loop buff_h-1 do
+      begin
+        curr_pos := curr_pos + buff_stride;
+        
+        System.Buffer.MemoryCopy(pointer(buff),pointer(curr_pos), buff_stride,buff_stride);
+        
       end;
       
     end;
     
-    ///Set's color of all pixel's in BGRA format
+    ///Fill's all pixel's with BGRA format color
     public procedure Fill(c: System.ValueTuple<byte,byte,byte,byte>) := Fill(@c);
     
-    ///Set's color of all pixel's in BGRA : {cb, cg, cr, ca}
+    ///Fill's all pixel's with BGRA : {cb, cg, cr, ca}
     public procedure Fill(cb,cg,cr,ca: byte) :=
     Fill(System.ValueTuple.Create(cb,cg,cr,ca));
     
-    ///Set's color of all pixel's in BGRA format stored in 32-bit integer
+    ///Fill's all pixel's with BGRA format color stored in 32-bit integer
     public procedure Fill(c: integer) := Fill(@c);
+    
+    ///Fill's all pixel's with non-transparent white color
+    public procedure FillWhite :=
+    MemFill(buff, 255, buff_stride*buff_h);
+    
+    ///Fill's all pixel's with fully transparent color
+    public procedure FillEmpty :=
+    MemFill(buff, 0, buff_stride*buff_h);
     
     {$endregion Fill}
     
@@ -1162,6 +1207,7 @@ type
     
     {$region destructor's}
     
+    ///Disposes all memory locks
     public procedure Dispose;
     begin
       
@@ -1176,6 +1222,7 @@ type
       
     end;
     
+    ///Calls Dispose
     public procedure Finalize; override :=
     Dispose;
     

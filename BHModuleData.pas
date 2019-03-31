@@ -99,9 +99,17 @@ type
     ///Must return unique name
     public property Name: string read; abstract;
     
-    {$resource 'Icons\default module icon.bmp'}
-    ///Must return System.Drawing.Image that represents module
-    public property Icon: Bitmap read new Bitmap(Assembly.GetCallingAssembly.GetManifestResourceStream('default module icon.bmp')); virtual;
+    {$resource 'Icons\default module icon.im'}
+    ///Must return Image that represents module
+    public property Icon: Image read new Image(Assembly.GetCallingAssembly.GetManifestResourceStream('default module icon.im')); virtual;
+    
+    ///Must return Menu object, that helps configure and operate module
+    ///Default value is instance of DummyMenu, which can't be opened
+    public property Menu: MenuBase read new DummyMenu; virtual;
+    
+    ///Must return Background color for main menu in BH
+    ///Default value is created pseudo randomly from type GUID
+    public property BackColor: System.ValueTuple<real,real,real,real> read GetColorFromHash(); virtual;
     
     {$endregion MainBody}
     
@@ -247,6 +255,29 @@ type
     {$endregion static}
     
     {$region Misc}
+    
+    private function GetColorFromHash: System.ValueTuple<real,real,real,real>;
+    begin
+      var Hue_2_RGB: real->real := vH->
+      begin
+        if vH<0 then vH += 1 else
+        if vH>1 then vH -= 1;
+        if 6*vH < 1 then Result := 1/4 + vH*3 else
+        if 2*vH < 1 then Result := 3/4 else
+        if 3*vH < 2 then Result := 1/4 + (2/3-vH)*3 else
+                         Result := 1/4;
+      end;
+      
+      var hc := self.GetType.GUID.ToByteArray;
+      var rng := new System.Random(hc[0]);
+      foreach var b in hc.Skip(1) do rng := new System.Random(rng.Next xor b);
+      
+      var H := rng.NextDouble;
+      Result.Item1 := Hue_2_RGB(H-1/3);
+      Result.Item2 := Hue_2_RGB(H+0/3);
+      Result.Item3 := Hue_2_RGB(H+1/3);
+      Result.Item4 := 1;
+    end;
     
     ///Return's $"BHModule[\"{Name}\"]"
     ///This is only for debug, so you can override it, if you want
